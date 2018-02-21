@@ -382,7 +382,7 @@ function qa_default_option($name)
 		'show_view_counts' => 0,
 		'show_when_created' => 1,
 		'site_text_direction' => 'ltr',
-		'site_theme' => 'Snow',
+		'site_theme' => 'SnowFlat',
 		'smtp_port' => 25,
 		'sort_answers_by' => 'created',
 		'tags_or_categories' => 'tc',
@@ -645,7 +645,7 @@ function qa_message_html_defaults()
 
 /**
  * Return $voteview parameter to pass to qa_post_html_fields() in /qa-include/app/format.php.
- * @param $postorbasetype The post, or for compatibility just a basetype, i.e. 'Q', 'A' or 'C'
+ * @param array|string $postorbasetype The post, or for compatibility just a basetype, i.e. 'Q', 'A' or 'C'
  * @param bool $full Whether full post is shown
  * @param bool $enabledif Whether to do checks for voting buttons (i.e. will always disable voting if false)
  * @return bool|string Possible values:
