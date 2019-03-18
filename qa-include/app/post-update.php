@@ -44,18 +44,18 @@ define('QA_POST_STATUS_QUEUED', 2);
  * $userid, $handle and $cookieid. Set $remoderate to true if the question should be requeued for moderation if
  * modified. Set $silent to true to not mark the question as edited. Reports event as appropriate. See /qa-include/app/posts.php
  * for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $title
- * @param $content
- * @param $format
- * @param $text
- * @param $tagstring
- * @param $notify
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $extravalue
- * @param $name
+ * @param array $oldquestion
+ * @param string $title
+ * @param string $content
+ * @param string $format
+ * @param string $text
+ * @param string $tagstring
+ * @param bool $notify
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param string|null $extravalue
+ * @param string|null $name
  * @param bool $remoderate
  * @param bool $silent
  */
@@ -106,6 +106,9 @@ function qa_question_set_content($oldquestion, $title, $content, $format, $text,
 
 	} elseif ($oldquestion['type'] == 'Q') { // not hidden or queued
 		qa_post_index($oldquestion['postid'], 'Q', $oldquestion['postid'], $oldquestion['parentid'], $title, $content, $format, $text, $tagstring, $oldquestion['categoryid']);
+		if ($tagschanged) {
+			qa_db_tagcount_update();
+		}
 	}
 
 	$eventparams = array(
@@ -141,18 +144,20 @@ function qa_question_set_content($oldquestion, $title, $content, $format, $text,
  * in $userid, $handle and $cookieid, and the database records for the selected and deselected answers in $answers.
  * Handles user points values and notifications.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $oldquestion
- * @param $selchildid
- * @param $answers
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $oldquestion
+ * @param int|null $selchildid
+ * @param array $answers
  */
 function qa_question_set_selchildid($userid, $handle, $cookieid, $oldquestion, $selchildid, $answers)
 {
 	$oldselchildid = $oldquestion['selchildid'];
 
-	qa_db_post_set_selchildid($oldquestion['postid'], isset($selchildid) ? $selchildid : null, $userid, qa_remote_ip_address());
+	$lastip = qa_remote_ip_address();
+
+	qa_db_post_set_selchildid($oldquestion['postid'], isset($selchildid) ? $selchildid : null, $userid, $lastip);
 	qa_db_points_update_ifuser($oldquestion['userid'], 'aselects');
 	qa_db_unselqcount_update();
 
@@ -165,6 +170,15 @@ function qa_question_set_selchildid($userid, $handle, $cookieid, $oldquestion, $
 			'postid' => $oldselchildid,
 			'answer' => $answers[$oldselchildid],
 		));
+
+		if (!empty($oldquestion['closed']) && empty($oldquestion['closedbyid'])) {
+			qa_db_post_set_closed($oldquestion['postid'], null, $userid, $lastip);
+
+			qa_report_event('q_reopen', $userid, $handle, $cookieid, array(
+				'postid' => $oldquestion['postid'],
+				'oldquestion' => $oldquestion,
+			));
+		}
 	}
 
 	if (isset($selchildid)) {
@@ -176,6 +190,17 @@ function qa_question_set_selchildid($userid, $handle, $cookieid, $oldquestion, $
 			'postid' => $selchildid,
 			'answer' => $answers[$selchildid],
 		));
+
+		if (empty($oldquestion['closed']) && qa_opt('do_close_on_select')) {
+			qa_db_post_set_closed($oldquestion['postid'], null, $userid, $lastip);
+
+			qa_report_event('q_close', $userid, $handle, $cookieid, array(
+				'postid' => $oldquestion['postid'],
+				'oldquestion' => $oldquestion,
+				'reason' => 'answer-selected',
+				'originalid' => $answers[$selchildid],
+			));
+		}
 	}
 }
 
@@ -184,11 +209,11 @@ function qa_question_set_selchildid($userid, $handle, $cookieid, $oldquestion, $
  * Reopen $oldquestion if it was closed. Pass details of the user doing this in $userid, $handle and $cookieid, and the
  * $oldclosepost (to match $oldquestion['closedbyid']) if any.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $oldclosepost
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldquestion
+ * @param array|null $oldclosepost
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_question_close_clear($oldquestion, $oldclosepost, $userid, $handle, $cookieid)
 {
@@ -212,12 +237,12 @@ function qa_question_close_clear($oldquestion, $oldclosepost, $userid, $handle, 
  * Close $oldquestion as a duplicate of the question with id $originalpostid. Pass details of the user doing this in
  * $userid, $handle and $cookieid, and the $oldclosepost (to match $oldquestion['closedbyid']) if any. See
  * /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $oldclosepost
- * @param $originalpostid
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldquestion
+ * @param array $oldclosepost
+ * @param int $originalpostid
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_question_close_duplicate($oldquestion, $oldclosepost, $originalpostid, $userid, $handle, $cookieid)
 {
@@ -238,12 +263,12 @@ function qa_question_close_duplicate($oldquestion, $oldclosepost, $originalposti
  * Close $oldquestion with the reason given in $note. Pass details of the user doing this in $userid, $handle and
  * $cookieid, and the $oldclosepost (to match $oldquestion['closedbyid']) if any.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $oldclosepost
- * @param $note
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldquestion
+ * @param array $oldclosepost
+ * @param string $note
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_question_close_other($oldquestion, $oldclosepost, $note, $userid, $handle, $cookieid)
 {
@@ -269,16 +294,17 @@ function qa_question_close_other($oldquestion, $oldclosepost, $note, $userid, $h
 
 
 /**
- * Set $oldquestion to hidden if $hidden is true, visible/normal if otherwise. All other parameters are as for qa_question_set_status(...)
+ * Set $oldquestion to hidden if $hidden is true, visible/normal if otherwise. All other parameters are as for
+ * qa_question_set_status(...)
  * @deprecated Replaced by qa_question_set_status.
- * @param $oldquestion
- * @param $hidden
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $answers
- * @param $commentsfollows
- * @param $closepost
+ * @param array $oldquestion
+ * @param bool $hidden
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $answers
+ * @param array $commentsfollows
+ * @param int|null $closepost
  */
 function qa_question_set_hidden($oldquestion, $hidden, $userid, $handle, $cookieid, $answers, $commentsfollows, $closepost = null)
 {
@@ -293,14 +319,14 @@ function qa_question_set_hidden($oldquestion, $hidden, $userid, $handle, $cookie
  * $commentsfollows ($commentsfollows can also contain records for follow-on questions which are ignored), and
  * $closepost to match $oldquestion['closedbyid'] (if any). Handles indexing, user points, cached counts and event
  * reports. See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $status
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $answers
- * @param $commentsfollows
- * @param $closepost
+ * @param array $oldquestion
+ * @param int $status
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $answers
+ * @param array $commentsfollows
+ * @param array|null $closepost
  */
 function qa_question_set_status($oldquestion, $status, $userid, $handle, $cookieid, $answers, $commentsfollows, $closepost = null)
 {
@@ -371,6 +397,10 @@ function qa_question_set_status($oldquestion, $status, $userid, $handle, $cookie
 	if ($wasqueued || ($status == QA_POST_STATUS_QUEUED))
 		qa_db_queuedcount_update();
 
+	if ($event === 'q_hide' || $event === 'q_reshow') {
+		qa_db_hiddencount_update();
+	}
+
 	if ($oldquestion['flagcount'])
 		qa_db_flaggedcount_update();
 
@@ -401,6 +431,8 @@ function qa_question_set_status($oldquestion, $status, $userid, $handle, $cookie
 				$closepost['content'], $closepost['format'], qa_viewer_text($closepost['content'], $closepost['format']), null, $closepost['categoryid']);
 		}
 	}
+
+	qa_question_uncache($oldquestion['postid']); // remove hidden posts immediately
 
 	$eventparams = array(
 		'postid' => $oldquestion['postid'],
@@ -441,14 +473,14 @@ function qa_question_set_status($oldquestion, $status, $userid, $handle, $cookie
  * contain records for follow-on questions which are ignored), and $closepost to match $oldquestion['closedbyid'] (if any).
  * Set $silent to true to not mark the question as edited. Handles cached counts and event reports and will reset category
  * IDs and paths for all answers and comments. See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $categoryid
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $answers
- * @param $commentsfollows
- * @param $closepost
+ * @param array $oldquestion
+ * @param int $categoryid
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $answers
+ * @param array $commentsfollows
+ * @param int|null $closepost
  * @param bool $silent
  */
 function qa_question_set_category($oldquestion, $categoryid, $userid, $handle, $cookieid, $answers, $commentsfollows, $closepost = null, $silent = false)
@@ -500,11 +532,11 @@ function qa_question_set_category($oldquestion, $categoryid, $userid, $handle, $
  * comments on it. Pass details of the user doing this in $userid, $handle and $cookieid, and $closepost to match
  * $oldquestion['closedbyid'] (if any). Handles unindexing, votes, points, cached counts and event reports.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldquestion
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $oldclosepost
+ * @param array $oldquestion
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array|null $oldclosepost
  */
 function qa_question_delete($oldquestion, $userid, $handle, $cookieid, $oldclosepost = null)
 {
@@ -533,6 +565,7 @@ function qa_question_delete($oldquestion, $userid, $handle, $cookieid, $oldclose
 	qa_db_post_delete($oldquestion['postid']); // also deletes any related voteds due to foreign key cascading
 	qa_update_counts_for_q(null);
 	qa_db_category_path_qcount_update($oldpath); // don't do inside qa_update_counts_for_q() since post no longer exists
+	qa_db_hiddencount_update();
 	qa_db_points_update_ifuser($oldquestion['userid'], array('qposts', 'aselects', 'qvoteds', 'upvoteds', 'downvoteds'));
 
 	foreach ($useridvotes as $voteruserid => $vote) {
@@ -547,10 +580,10 @@ function qa_question_delete($oldquestion, $userid, $handle, $cookieid, $oldclose
 /**
  * Set the author (application level) of $oldquestion to $userid and also pass $handle and $cookieid
  * of user. Updates points and reports events as appropriate.
- * @param $oldquestion
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldquestion
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_question_set_userid($oldquestion, $userid, $handle, $cookieid)
 {
@@ -574,7 +607,7 @@ function qa_question_set_userid($oldquestion, $userid, $handle, $cookieid)
 
 /**
  * Remove post $postid from our index and update appropriate word counts. Calls through to all search modules.
- * @param $postid
+ * @param int $postid
  */
 function qa_post_unindex($postid)
 {
@@ -593,22 +626,34 @@ function qa_post_unindex($postid)
 
 
 /**
+ * Delete the cache for a question. Used after it or its answers/comments are hidden, to prevent them remaining visible to visitors/search engines.
+ * @param int $questionId Post ID to delete.
+ * @return bool
+ */
+function qa_question_uncache($questionId)
+{
+	$cacheDriver = Q2A_Storage_CacheFactory::getCacheDriver();
+	return $cacheDriver->delete("question:$questionId");
+}
+
+
+/**
  * Change the fields of an answer (application level) to $content, $format, $notify and $name, then reindex based on
  * $text. For backwards compatibility if $name is null then the name will not be changed. Pass the answer's database
  * record before changes in $oldanswer, the question's in $question, and details of the user doing this in $userid,
  * $handle and $cookieid. Set $remoderate to true if the question should be requeued for moderation if modified. Set
  * $silent to true to not mark the question as edited. Handle indexing and event reports as appropriate. See
  * /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldanswer
- * @param $content
- * @param $format
- * @param $text
- * @param $notify
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $name
+ * @param array $oldanswer
+ * @param string $content
+ * @param string $format
+ * @param string $text
+ * @param bool $notify
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param string|null $name
  * @param bool $remoderate
  * @param bool $silent
  */
@@ -671,13 +716,13 @@ function qa_answer_set_content($oldanswer, $content, $format, $text, $notify, $u
 /**
  * Set $oldanswer to hidden if $hidden is true, visible/normal if otherwise. All other parameters are as for qa_answer_set_status(...)
  * @deprecated Replaced by qa_answer_set_status.
- * @param $oldanswer
- * @param $hidden
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $commentsfollows
+ * @param array $oldanswer
+ * @param bool $hidden
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $commentsfollows
  */
 function qa_answer_set_hidden($oldanswer, $hidden, $userid, $handle, $cookieid, $question, $commentsfollows)
 {
@@ -691,13 +736,13 @@ function qa_answer_set_hidden($oldanswer, $hidden, $userid, $handle, $cookieid, 
  * and the database records for all comments on the answer in $commentsfollows ($commentsfollows can also contain other
  * records which are ignored). Handles indexing, user points, cached counts and event reports. See /qa-include/app/posts.php for
  * a higher-level function which is easier to use.
- * @param $oldanswer
- * @param $status
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $commentsfollows
+ * @param array $oldanswer
+ * @param int $status
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $commentsfollows
  */
 function qa_answer_set_status($oldanswer, $status, $userid, $handle, $cookieid, $question, $commentsfollows)
 {
@@ -761,6 +806,10 @@ function qa_answer_set_status($oldanswer, $status, $userid, $handle, $cookieid, 
 	if ($wasqueued || $status == QA_POST_STATUS_QUEUED)
 		qa_db_queuedcount_update();
 
+	if ($event === 'a_hide' || $event === 'a_reshow') {
+		qa_db_hiddencount_update();
+	}
+
 	if ($oldanswer['flagcount'])
 		qa_db_flaggedcount_update();
 
@@ -775,6 +824,8 @@ function qa_answer_set_status($oldanswer, $status, $userid, $handle, $cookieid, 
 			}
 		}
 	}
+
+	qa_question_uncache($question['postid']); // remove hidden posts immediately
 
 	$eventparams = array(
 		'postid' => $oldanswer['postid'],
@@ -810,11 +861,11 @@ function qa_answer_set_status($oldanswer, $status, $userid, $handle, $cookieid, 
  * follow-on questions. Pass the database record for the question in $question and details of the user doing this
  * in $userid, $handle and $cookieid. Handles unindexing, votes, points, cached counts and event reports.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldanswer
- * @param $question
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldanswer
+ * @param array $question
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_answer_delete($oldanswer, $question, $userid, $handle, $cookieid)
 {
@@ -843,6 +894,7 @@ function qa_answer_delete($oldanswer, $question, $userid, $handle, $cookieid)
 	}
 
 	qa_update_q_counts_for_a($question['postid']);
+	qa_db_hiddencount_update();
 	qa_db_points_update_ifuser($oldanswer['userid'], array('aposts', 'aselecteds', 'avoteds', 'upvoteds', 'downvoteds'));
 
 	foreach ($useridvotes as $voteruserid => $vote) {
@@ -857,10 +909,10 @@ function qa_answer_delete($oldanswer, $question, $userid, $handle, $cookieid)
 /**
  * Set the author (application level) of $oldanswer to $userid and also pass $handle and $cookieid
  * of user. Updates points and reports events as appropriate.
- * @param $oldanswer
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldanswer
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_answer_set_userid($oldanswer, $userid, $handle, $cookieid)
 {
@@ -891,17 +943,17 @@ function qa_answer_set_userid($oldanswer, $userid, $handle, $cookieid)
  * otherwise null. Set $remoderate to true if the question should be requeued for moderation if modified. Set $silent
  * to true to not mark the question as edited. Handles unindexing and event reports. See /qa-include/app/posts.php for a
  * higher-level function which is easier to use.
- * @param $oldcomment
- * @param $content
- * @param $format
- * @param $text
- * @param $notify
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $parent
- * @param $name
+ * @param array $oldcomment
+ * @param string $content
+ * @param string $format
+ * @param string $text
+ * @param bool $notify
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $parent
+ * @param string|null $name
  * @param bool $remoderate
  * @param bool $silent
  */
@@ -967,19 +1019,19 @@ function qa_comment_set_content($oldcomment, $content, $format, $text, $notify, 
  * $commentsfollows ($commentsfollows can also contain other records which are ignored). Set $remoderate to true if the
  * question should be requeued for moderation if modified. Set $silent to true to not mark the question as edited.
  * Handles indexing (based on $text), user points, cached counts and event reports.
- * @param $oldanswer
- * @param $parentid
- * @param $content
- * @param $format
- * @param $text
- * @param $notify
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $answers
- * @param $commentsfollows
- * @param $name
+ * @param array $oldanswer
+ * @param int $parentid
+ * @param string $content
+ * @param string $format
+ * @param string $text
+ * @param bool $notify
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $answers
+ * @param array $commentsfollows
+ * @param string|null $name
  * @param bool $remoderate
  * @param bool $silent
  */
@@ -1065,13 +1117,13 @@ function qa_answer_to_comment($oldanswer, $parentid, $content, $format, $text, $
 /**
  * Set $oldcomment to hidden if $hidden is true, visible/normal if otherwise. All other parameters are as for qa_comment_set_status(...)
  * @deprecated Replaced by qa_comment_set_status.
- * @param $oldcomment
- * @param $hidden
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $parent
+ * @param array $oldcomment
+ * @param bool $hidden
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $parent
  */
 function qa_comment_set_hidden($oldcomment, $hidden, $userid, $handle, $cookieid, $question, $parent)
 {
@@ -1084,13 +1136,13 @@ function qa_comment_set_hidden($oldcomment, $hidden, $userid, $handle, $cookieid
  * antecedent question's record in $question, details of the user doing this in $userid, $handle and $cookieid, and the
  * answer's database record in $answer if this is a comment on an answer, otherwise null. Handles indexing, user
  * points, cached counts and event reports. See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldcomment
- * @param $status
- * @param $userid
- * @param $handle
- * @param $cookieid
- * @param $question
- * @param $parent
+ * @param array $oldcomment
+ * @param int $status
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
+ * @param array $question
+ * @param array $parent
  */
 function qa_comment_set_status($oldcomment, $status, $userid, $handle, $cookieid, $question, $parent)
 {
@@ -1148,6 +1200,10 @@ function qa_comment_set_status($oldcomment, $status, $userid, $handle, $cookieid
 	if ($wasqueued || $status == QA_POST_STATUS_QUEUED)
 		qa_db_queuedcount_update();
 
+	if ($event === 'c_hide' || $event === 'c_reshow') {
+		qa_db_hiddencount_update();
+	}
+
 	if ($oldcomment['flagcount'])
 		qa_db_flaggedcount_update();
 
@@ -1156,6 +1212,8 @@ function qa_comment_set_status($oldcomment, $status, $userid, $handle, $cookieid
 		qa_post_index($oldcomment['postid'], 'C', $question['postid'], $oldcomment['parentid'], null, $oldcomment['content'],
 			$oldcomment['format'], qa_viewer_text($oldcomment['content'], $oldcomment['format']), null, $oldcomment['categoryid']);
 	}
+
+	qa_question_uncache($question['postid']); // remove hidden posts immediately
 
 	$eventparams = array(
 		'postid' => $oldcomment['postid'],
@@ -1204,12 +1262,12 @@ function qa_comment_set_status($oldcomment, $status, $userid, $handle, $cookieid
  * and the answer's database record in $answer if this is a comment on an answer, otherwise null. Pass details of the user
  * doing this in $userid, $handle and $cookieid. Handles unindexing, points, cached counts and event reports.
  * See /qa-include/app/posts.php for a higher-level function which is easier to use.
- * @param $oldcomment
- * @param $question
- * @param $parent
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldcomment
+ * @param array $question
+ * @param array $parent
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_comment_delete($oldcomment, $question, $parent, $userid, $handle, $cookieid)
 {
@@ -1231,6 +1289,7 @@ function qa_comment_delete($oldcomment, $question, $parent, $userid, $handle, $c
 
 	qa_post_unindex($oldcomment['postid']);
 	qa_db_post_delete($oldcomment['postid']);
+	qa_db_hiddencount_update();
 	qa_db_points_update_ifuser($oldcomment['userid'], array('cposts'));
 	qa_db_ccount_update();
 
@@ -1241,10 +1300,10 @@ function qa_comment_delete($oldcomment, $question, $parent, $userid, $handle, $c
 /**
  * Set the author (application level) of $oldcomment to $userid and also pass $handle and $cookieid
  * of user. Updates points and reports events as appropriate.
- * @param $oldcomment
- * @param $userid
- * @param $handle
- * @param $cookieid
+ * @param array $oldcomment
+ * @param mixed $userid
+ * @param string $handle
+ * @param string $cookieid
  */
 function qa_comment_set_userid($oldcomment, $userid, $handle, $cookieid)
 {

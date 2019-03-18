@@ -43,7 +43,7 @@ define('QA_PERMIT_SUPERS', 0);
 /**
  * Return an array [name] => [value] of settings for each option in $names.
  * If any options are missing from the database, set them to their defaults
- * @param $names
+ * @param array $names
  * @return array
  */
 function qa_get_options($names)
@@ -96,23 +96,14 @@ function qa_get_options($names)
 /**
  * Return the value of option $name if it has already been loaded, otherwise return null
  * (used to prevent a database query if it's not essential for us to know the option value)
- * @param $name
- * @return
+ * @param string $name
+ * @return string
  */
 function qa_opt_if_loaded($name)
 {
 	global $qa_options_cache;
 
 	return @$qa_options_cache[$name];
-}
-
-
-/**
- * @deprecated Deprecated since Q2A 1.3 now that all options are retrieved together.
- * @param $names
- */
-function qa_options_set_pending($names)
-{
 }
 
 
@@ -148,7 +139,7 @@ function qa_preload_options()
 
 /**
  * Load the options from the $results of the database selectspecs defined in qa_preload_options()
- * @param $results
+ * @param array $results
  * @return mixed
  */
 function qa_load_options_results($results)
@@ -170,8 +161,8 @@ function qa_load_options_results($results)
 /**
  * Set an option $name to $value (application level) in both cache and database, unless
  * $todatabase=false, in which case set it in the cache only
- * @param $name
- * @param $value
+ * @param string $name
+ * @param mixed|null $value
  * @param bool $todatabase
  * @return mixed
  */
@@ -190,7 +181,7 @@ function qa_set_option($name, $value, $todatabase = true)
 
 /**
  * Reset the options in $names to their defaults
- * @param $names
+ * @param array $names
  * @return mixed
  */
 function qa_reset_options($names)
@@ -205,7 +196,7 @@ function qa_reset_options($names)
 
 /**
  * Return the default value for option $name
- * @param $name
+ * @param string $name
  * @return bool|mixed|string
  */
 function qa_default_option($name)
@@ -398,7 +389,13 @@ function qa_default_option($name)
 
 	switch ($name) {
 		case 'site_url':
-			$value = 'http://' . @$_SERVER['HTTP_HOST'] . strtr(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'), '\\', '/') . '/';
+			$protocol =
+				(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+				(!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on') ||
+				(!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+					? 'https'
+					: 'http';
+			$value = $protocol . '://' . @$_SERVER['HTTP_HOST'] . strtr(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'), '\\', '/') . '/';
 			break;
 
 		case 'site_title':
@@ -564,7 +561,7 @@ function qa_default_site_title()
 /**
  * Return an array of defaults for the $options parameter passed to qa_post_html_fields() and its ilk for posts of $basetype='Q'/'A'/'C'
  * Set $full to true if these posts will be viewed in full, i.e. on a question page rather than a question listing
- * @param $basetype
+ * @param string $basetype
  * @param bool $full
  * @return array|mixed
  */
@@ -595,7 +592,6 @@ function qa_post_html_defaults($basetype, $full = false)
 		'blockwordspreg' => qa_get_block_words_preg(),
 		'showurllinks' => qa_opt('show_url_links'),
 		'linksnewwindow' => qa_opt('links_in_new_window'),
-		'microformats' => $full,
 		'fulldatedays' => qa_opt('show_full_date_days'),
 	);
 }
@@ -605,8 +601,8 @@ function qa_post_html_defaults($basetype, $full = false)
  * Return an array of options for post $post to pass in the $options parameter to qa_post_html_fields() and its ilk. Preferably,
  * call qa_post_html_defaults() previously and pass its output in $defaults, to save excessive recalculation for each item in a
  * list. Set $full to true if these posts will be viewed in full, i.e. on a question page rather than a question listing.
- * @param $post
- * @param $defaults
+ * @param array $post
+ * @param array|null $defaults
  * @param bool $full
  * @return array|mixed|null
  */

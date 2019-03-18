@@ -37,21 +37,21 @@ if (!defined('QA_VERSION')) { // don't allow this page to be requested directly 
  * page has an RSS feed whose URL uses that prefix. If there are no links to other pages, $suggest
  * is used to suggest what the user should do. The $pagelinkparams are passed through to
  * qa_html_page_links(...) which creates links for page 2, 3, etc..
- * @param $questions
- * @param $pagesize
- * @param $start
- * @param $count
- * @param $sometitle
- * @param $nonetitle
- * @param $navcategories
- * @param $categoryid
- * @param $categoryqcount
- * @param $categorypathprefix
- * @param $feedpathprefix
- * @param $suggest
- * @param $pagelinkparams
- * @param $categoryparams
- * @param $dummy
+ * @param array $questions
+ * @param int|null $pagesize
+ * @param int $start
+ * @param int|null $count
+ * @param string $sometitle
+ * @param string $nonetitle
+ * @param array $navcategories
+ * @param int|null $categoryid
+ * @param bool $categoryqcount
+ * @param string|null $categorypathprefix
+ * @param string|null $feedpathprefix
+ * @param string $suggest
+ * @param array|null $pagelinkparams
+ * @param array|null$categoryparams
+ * @param null $dummy
  * @return array
  */
 function qa_q_list_page_content($questions, $pagesize, $start, $count, $sometitle, $nonetitle,
@@ -62,6 +62,7 @@ function qa_q_list_page_content($questions, $pagesize, $start, $count, $sometitl
 
 	require_once QA_INCLUDE_DIR . 'app/format.php';
 	require_once QA_INCLUDE_DIR . 'app/updates.php';
+	require_once QA_INCLUDE_DIR . 'app/posts.php';
 
 	$userid = qa_get_logged_in_userid();
 
@@ -89,7 +90,7 @@ function qa_q_list_page_content($questions, $pagesize, $start, $count, $sometitl
 
 	$qa_content['q_list']['qs'] = array();
 
-	if (count($questions)) {
+	if (!empty($questions)) {
 		$qa_content['title'] = $sometitle;
 
 		$defaults = qa_post_html_defaults('Q');
@@ -100,7 +101,7 @@ function qa_q_list_page_content($questions, $pagesize, $start, $count, $sometitl
 		foreach ($questions as $question) {
 			$fields = qa_any_to_q_html_fields($question, $userid, qa_cookie_get(), $usershtml, null, qa_post_html_options($question, $defaults));
 
-			if (!empty($fields['raw']['closedbyid'])) {
+			if (qa_post_is_closed($question)) {
 				$fields['closed'] = array(
 					'state' => qa_lang_html('main/closed'),
 				);
@@ -152,8 +153,8 @@ function qa_q_list_page_content($questions, $pagesize, $start, $count, $sometitl
 
 /**
  * Return the sub navigation structure common to question listing pages
- * @param $sort
- * @param $categoryslugs
+ * @param string $sort
+ * @param array|null $categoryslugs
  * @return array
  */
 function qa_qs_sub_navigation($sort, $categoryslugs)
@@ -209,8 +210,8 @@ function qa_qs_sub_navigation($sort, $categoryslugs)
 
 /**
  * Return the sub navigation structure common to unanswered pages
- * @param $by
- * @param $categoryslugs
+ * @param string $by
+ * @param array|null $categoryslugs
  * @return array
  */
 function qa_unanswered_sub_navigation($by, $categoryslugs)

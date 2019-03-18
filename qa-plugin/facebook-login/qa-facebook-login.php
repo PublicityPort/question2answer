@@ -57,7 +57,7 @@ class qa_facebook_login
 		else
 			$size = 'medium';
 
-?>
+		?>
 	<span id="fb-root" style="display:inline;"></span>
 	<script>
 	window.fbAsyncInit = function() {
@@ -82,7 +82,7 @@ class qa_facebook_login
 	</script>
 	<span class="fb-login-button" style="display:inline; vertical-align:middle;" size="<?php echo $size?>" <?php echo $logout ? 'autologoutlink="true"' : 'scope="email,user_about_me,user_location,user_website"'?>>
 	</span>
-<?php
+		<?php
 	}
 
 
@@ -99,26 +99,29 @@ class qa_facebook_login
 		$ready = strlen(qa_opt('facebook_app_id')) && strlen(qa_opt('facebook_app_secret'));
 
 		return array(
-			'ok' => $saved ? 'Facebook application details saved' : null,
+			'ok' => $saved ? qa_lang_html('admin/options_saved') : null,
 
 			'fields' => array(
 				array(
-					'label' => 'Facebook App ID:',
+					'label' => qa_lang_html('facebook_login/app_id'),
 					'value' => qa_html(qa_opt('facebook_app_id')),
 					'tags' => 'name="facebook_app_id_field"',
 				),
 
 				array(
-					'label' => 'Facebook App Secret:',
+					'label' => qa_lang_html('facebook_login/app_secret'),
 					'value' => qa_html(qa_opt('facebook_app_secret')),
 					'tags' => 'name="facebook_app_secret_field"',
-					'error' => $ready ? null : 'To use Facebook Login, please <a href="http://developers.facebook.com/setup/" target="_blank">set up a Facebook application</a>.',
+					'error' => $ready ? null : strtr(qa_lang_html('facebook_login/set_up_facebook_app'), array(
+							'^1' => '<a href="https://developers.facebook.com/setup/" target="_blank">',
+							'^2' => '</a>'
+					))
 				),
 			),
 
 			'buttons' => array(
 				array(
-					'label' => 'Save Changes',
+					'label' => qa_lang_html('main/save_button'),
 					'tags' => 'name="facebook_save_button"',
 				),
 			),

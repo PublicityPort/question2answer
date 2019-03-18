@@ -66,7 +66,6 @@ class qa_filter_basic
 			$question['title'] = isset($question['title']) ? $question['title'] : '';
 			$question['content'] = isset($question['content']) ? $question['content'] : '';
 			$question['text'] = isset($question['text']) ? $question['text'] : '';
-			$question['tags'] = isset($question['tags']) ? $question['tags'] : array();
 		}
 
 		$qminlength = qa_opt('min_len_q_title');
@@ -170,11 +169,8 @@ class qa_filter_basic
 
 	/**
 	 * Wrapper function for validating a post's email address.
-	 *
-	 * @deprecated This function will become private in Q2A 1.8. It is specific to this plugin and
-	 * should not be used by outside code.
 	 */
-	public function validate_post_email(&$errors, $post)
+	private function validate_post_email(&$errors, $post)
 	{
 		if (@$post['notify'] && strlen(@$post['email'])) {
 			$error = $this->filter_email($post['email'], null);
